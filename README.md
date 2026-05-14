@@ -5,7 +5,7 @@ Research Question
 How does obesity prevalence in the US during 2024 vary by age group and state?
 
 Research Motivation: 
-
+Obesity is a major public health concern in the United States, associated with elevated risks of type 2 diabetes, cardiovascular disease, and numerous other chronic conditions. Understanding how obesity prevalence varies across states and demographic groups is critical for targeting public health interventions effectively.
 
 Data Source
 BRFSS 2024, CDC (Behavioral Risk Factor Surveillance System)
@@ -18,4 +18,4 @@ https://github.com/ethancinthemainframe/R-lemme-cry-about-it-later-.git
 
 AI Disclosure:
 
-CLaude was used in every part of this assignment
+Claude was used in every part of this assignment
