@@ -292,3 +292,7 @@ This report applied a two-way ANOVA to 2024 CDC BRFSS obesity prevalence data to
 # References
 
 Centers for Disease Control and Prevention (CDC). (2024). Adult Obesity Prevalence Maps. National Center for Chronic Disease Prevention and Health Promotion, Division of Nutrition, Physical Activity, and Obesity. https://www.cdc.gov/obesity/data/prevalence-maps.html
+
+# AI Disclosure:
+
+Claude was used in every part of this assignment
