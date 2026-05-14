@@ -1,0 +1,294 @@
+---
+title: "Obesity Prevalence by State and Age Group in the United States (2024)"
+author: "Ethan Chacko"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.align = "left", fig.width = 5.5, fig.height = 3.8,
+                      out.width = "90%")
+```
+
+# Introduction
+
+Obesity is a major public health concern in the United States, associated with elevated risks of type 2 diabetes, cardiovascular disease, and numerous other chronic conditions. Understanding how obesity prevalence varies across states and demographic groups is critical for targeting public health interventions effectively.
+
+This report examines 2024 self-reported obesity prevalence data collected through the Centers for Disease Control and Prevention (CDC) Behavioral Risk Factor Surveillance System (BRFSS, which uses telephone health surveys to gather data. Specifically, this analysis investigates whether obesity prevalence differs significantly by state and age group (18-39, 40-59, and 60+ years), and whether these two factors interact.
+
+Research question: Does obesity prevalence in the United States vary significantly by state, by age group, and what (if any) is the interaction between state and age group?
+
+To answer this, a two-way ANOVA is used, with state and age group as independent variables and obesity prevalence (%) as the continuous dependent variable.
+
+---
+
+# Materials & Methods
+
+## Data Source
+
+Data were obtained from the **2024 CDC BRFSS Adult Obesity Prevalence Maps** dataset, publicly available at [https://www.cdc.gov/obesity/data/prevalence-maps.html](https://www.cdc.gov/obesity/data/prevalence-maps.html). The BRFSS collects data through random telephone surveys of adults across all 50 U.S. states and selected territories. Obesity is defined as a body mass index (BMI) over 30 kg/m^2, based on self-reported height and weight.
+
+Three CSV files were used, each reporting age-group-specific prevalence estimates:
+
+- `2024-obesity-aged-18-39y.csv` --- Adults aged 18-39 years  
+- `2024-obesity-aged-40-59y.csv` --- Adults aged 40-59 years  
+- `2024-obesity-aged-60y.csv` --- Adults aged 60 years or older  
+
+Each file contains state/territory name, prevalence estimate, and 95% confidence intervals. Observations marked as "Insufficient data" were excluded from analysis.
+
+## Sample
+
+The dataset covers 54 geographic units (50 states, Washington DC, Puerto Rico, Guam, and U.S. Virgin Islands), yielding up to 162 observations across three age groups. After removing Tennessee (insufficient data) across all three age groups, 159 observations remained.
+
+## Variables
+
+| Variable | Type | Description |
+|---|---|---|
+| `Prevalence` | Continuous (dependent) | Age-group-specific obesity prevalence (%) |
+| `State` | Categorical (independent) | Geographic unit (54 levels) |
+| `Age_Group` | Categorical (independent) | Age group: 18-39, 40-59, or 60+ (3 levels) |
+
+## Statistical Analysis
+
+A two-way ANOVA was conducted to assess:
+
+1. Main effect of State: whether mean obesity prevalence differs significantly across geographic units.
+2. Main effect of Age Group: whether mean obesity prevalence differs significantly across the three age groups.
+3. State x Age Group interaction: whether the effect of age group on prevalence differs by state (or vice versa).
+
+ANOVA assumptions were evaluated:
+
+- Normality of residuals: assessed via Shapiro-Wilk test and Q-Q plot.
+- **Homoscedasticity: assessed via residuals vs. fitted plot.
+- Independence of Groups: assessed via study design analysis, every age group and state's observations are independent of each other.
+
+Where the ANOVA test was significant, Tukey's Honest Significant Difference (HSD) post-hoc test was applied to identify which age group pairs differed significantly.
+
+Effect sizes were reported using eta-squared ($\eta^2$), where $\eta^2$ = SS_effect / SS_total. 
+
+---
+
+# Results
+
+## Data Preparation
+
+```{r load-data}
+library(tidyverse)
+library(car)
+library(emmeans)
+library(knitr)
+
+# Load the three age-group CSV files
+d18 <- read.csv("2024-obesity-aged-18-39y.csv") |>
+  mutate(Age_Group = "18-39")
+
+d40 <- read.csv("2024-obesity-aged-40-59y.csv") |>
+  mutate(Age_Group = "40-59")
+
+d60 <- read.csv("2024-obesity-aged-60y.csv") |>
+  mutate(Age_Group = "60+")
+
+# Combine into one dataframe
+df <- bind_rows(d18, d40, d60) |>
+  mutate(
+    Prevalence = suppressWarnings(as.numeric(Prevalence)),
+    State      = as.factor(State),
+    Age_Group  = factor(Age_Group, levels = c("18-39", "40-59", "60+"))
+  ) |>
+  filter(!is.na(Prevalence))  # Remove "Insufficient data" rows
+
+cat("Total observations:", nrow(df), "\n")
+cat("Unique states/territories:", nlevels(df$State), "\n")
+```
+
+## Descriptive Statistics
+
+```{r descriptives}
+# Summary by age group
+summary_tbl <- df |>
+  group_by(Age_Group) |>
+  summarise(
+    N    = n(),
+    Mean = round(mean(Prevalence), 2),
+    SD   = round(sd(Prevalence), 2),
+    Min  = min(Prevalence),
+    Max  = max(Prevalence)
+  )
+
+kable(summary_tbl,
+      caption = "Descriptive Statistics: Obesity Prevalence (%) by Age Group",
+      col.names = c("Age Group", "N", "Mean (%)", "SD", "Min (%)", "Max (%)"))
+```
+
+Obesity prevalence was highest among adults aged 40-59 years (mean = 40.32%, SD = 4.94%), followed by adults aged 60+ years (mean = 32.25%, SD = 3.38%), and lowest among adults aged 18-39 years (mean = 30.60%, SD = 4.33%). This pattern suggests a peak in mid-life obesity burden, with some decline in older adults, which is consistent with existing literature.
+
+## Visualizations
+
+### Obesity Prevalence by Age Group
+
+```{r boxplot-age, fig.cap="Obesity Prevalence (%) by Age Group. Boxes show IQR; horizontal line = median; whiskers = 1.5x IQR."}
+ggplot(df, aes(x = Age_Group, y = Prevalence, fill = Age_Group)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.size = 2) +
+  scale_fill_manual(values = c("#4E79A7", "#F28E2B", "#59A14F")) +
+  labs(
+    title = "Obesity Prevalence by Age Group (2024 CDC BRFSS)",
+    x     = "Age Group",
+    y     = "Obesity Prevalence (%)",
+    fill  = "Age Group"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none")
+```
+
+### Obesity Prevalence by State (All Age Groups)
+
+```{r barplot-state, fig.height=9, fig.width=7, out.width="90%", fig.cap="Mean obesity prevalence by state, coloured by age group. States sorted by mean across all age groups."}
+state_order <- df |>
+  group_by(State) |>
+  summarise(Mean = mean(Prevalence)) |>
+  arrange(Mean) |>
+  pull(State)
+
+df |>
+  mutate(State = factor(State, levels = state_order)) |>
+  ggplot(aes(x = State, y = Prevalence, fill = Age_Group)) +
+  geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
+  scale_fill_manual(values = c("#4E79A7", "#F28E2B", "#59A14F")) +
+  coord_flip() +
+  labs(
+    title = "Obesity Prevalence by State and Age Group (2024 CDC BRFSS)",
+    x     = NULL,
+    y     = "Obesity Prevalence (%)",
+    fill  = "Age Group"
+  ) +
+  theme_classic(base_size = 10)
+```
+
+### Interaction Plot: State $\times$ Age Group
+
+```{r interaction-plot, fig.height=6, fig.cap="Interaction plot showing obesity prevalence trajectories across age groups for each state. Parallel lines suggest no interaction; crossing lines indicate an interaction effect."}
+# Use a sample of states for readability, or all
+ggplot(df, aes(x = Age_Group, y = Prevalence, group = State, colour = State)) +
+  geom_line(alpha = 0.4, linewidth = 0.6) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  stat_summary(aes(group = 1), fun = mean, geom = "line",
+               colour = "black", linewidth = 1.5, linetype = "dashed") +
+  labs(
+    title = "State x Age Group Interaction Plot",
+    subtitle = "Dashed line = overall mean trajectory",
+    x     = "Age Group",
+    y     = "Obesity Prevalence (%)"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none")
+```
+
+## Assumption Checks
+
+The full two-way ANOVA model includes a State x Age_Group interaction term with 54 states x 3 age groups = 162 cells, which is exactly equal to the number of observations (N = 159 after data cleaning). This means the interaction model is saturated, using all available degrees of freedom, leaving zero residual df. Consequently, only the main-effects-only model applies.
+
+```{r assumptions}
+# Main-effects model for assumption checking (avoids saturated-model problem)
+model_main <- aov(Prevalence ~ State + Age_Group, data = df)
+
+# Full interaction model for ANOVA results
+model <- aov(Prevalence ~ State + Age_Group + State:Age_Group, data = df)
+```
+
+### Normality of Residuals
+
+```{r normality, fig.cap="Q-Q plot of residuals from the main-effects model. Points close to the diagonal indicate approximate normality."}
+# Q-Q plot
+qqnorm(residuals(model_main), main = "Normal Q-Q Plot of Residuals (Main-Effects Model)")
+qqline(residuals(model_main), col = "red", lwd = 2)
+
+# Shapiro-Wilk test
+sw <- shapiro.test(residuals(model_main))
+cat("Shapiro-Wilk test: W =", round(sw$statistic, 4),
+    ", p =", round(sw$p.value, 4), "\n")
+```
+
+Interpretation: If the Shapiro-Wilk p-value > 0.05, the normality assumption is not violated. ANOVA is robust to mild departures from normality, especially at moderate sample sizes (N = 159).
+
+### Homogeneity of Variance
+
+```{r resid-plot, fig.cap="Residuals vs. Fitted values from the main-effects model. No systematic fanning or curvature indicates homogeneity of variance."}
+plot(model_main, which = 1, main = "Residuals vs Fitted (Main-Effects Model)")
+```
+
+Because the points are scattered fairly evenly around y=0, homoscedasticity can be assumed.
+
+## Two-Way ANOVA Results
+
+```{r anova-results}
+anova_tbl <- summary(model)[[1]]
+kable(round(anova_tbl, 4),
+      caption = "Two-Way ANOVA Summary: Obesity Prevalence ~ State + Age Group + Interaction")
+```
+
+```{r eta-squared}
+# Compute eta-squared for each effect
+ss    <- anova_tbl[["Sum Sq"]]
+total <- sum(ss)
+eta2  <- round(ss / total, 4)
+
+effects <- rownames(anova_tbl)
+eta_df  <- data.frame(
+  Effect         = effects,
+  SS             = round(ss, 2),
+  Eta_squared    = eta2
+)
+kable(eta_df, caption = "Effect Sizes (Eta-squared)",
+      col.names = c("Effect", "Sum of Squares", "Eta-squared"))
+```
+
+### Post-Hoc Test: Tukey HSD for Age Group
+
+```{r tukey}
+emm <- emmeans(model, ~ Age_Group)
+pairs_out <- pairs(emm, adjust = "tukey")
+kable(summary(pairs_out),
+      caption = "Tukey HSD Post-Hoc Comparisons: Age Group",
+      digits  = 4)
+```
+
+---
+
+# Interpretation and Discussion
+
+## Summary of Findings
+
+The two-way ANOVA tested whether U.S. obesity prevalence (2024 BRFSS) differed by state, age group, and their interaction.
+
+- State (main effect): The significant main effect of state indicates that obesity prevalence varies meaningfully across U.S. states and territories, even after accounting for age group. Geographic variation may reflect differences in socioeconomic conditions, food environments, physical activity infrastructure, and racial/ethnic composition across states.
+
+- Age Group (main effect): The significant main effect of age group indicates that adults in the 40-59 age group have substantially higher obesity prevalence than both the 18-39 and 60+ groups. This mid-life obesity peak is consistent with established patterns in the literature: younger adults may benefit from higher metabolic rates, while older adults may show lower measured prevalence partly due to survivorship bias and changing body composition. Post-hoc Tukey HSD comparisons clarify which specific pairs of age groups differ significantly.
+
+- Interaction (State x Age Group): Because of the insufficient nature of the data, interaction cannot be studied (there is only one prevalence per state per age group).
+## Limitations
+
+1. Self-reported data: BRFSS relies on self-reported height and weight, which may underestimate true obesity prevalence, particularly among groups with greater social desirability concerns.
+
+2. Confounding: State-level differences in racial/ethnic composition, income distribution, and healthcare access are not controlled for in this analysis.
+
+
+## Future Research
+
+Future analyses could extend this work by incorporating individual-level BRFSS data to include sociodemographic factors (sex, race/ethnicity, income, education), or even examining trends across multiple BRFSS survey years.
+
+---
+
+# Conclusions
+
+This report applied a two-way ANOVA to 2024 CDC BRFSS obesity prevalence data to examine variation across U.S. states and three age groups (18-39, 40-59, 60+). Descriptive statistics show that adults aged 40-59 carry the highest obesity burden nationally (Mean = 40.3%), alongside significant geographic variation across states. The two-way ANOVA results quantify the relative contributions of state, age group, and but does not capture their interaction due to the insufficient nature of the data.
+
+---
+
+# References
+
+Centers for Disease Control and Prevention (CDC). (2024). Adult Obesity Prevalence Maps. National Center for Chronic Disease Prevention and Health Promotion, Division of Nutrition, Physical Activity, and Obesity. https://www.cdc.gov/obesity/data/prevalence-maps.html
